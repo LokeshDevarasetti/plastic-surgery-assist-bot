@@ -4,7 +4,7 @@ import type { Article } from "./pubmed";
 export const ROUTER_PROMPT = `You route questions for a plastic surgery education assistant. Reply with JSON only, no other text.
 Format: {"route":"search","query":"keyword keyword keyword"} or {"route":"direct"}
 Use "search" for any question about a plastic surgery procedure, its risks, recovery, outcomes, technique, or cost, and for everyday goals like "remove fat from my stomach". Put 2 to 6 plain medical keywords in "query" (for example "abdominoplasty complications" or "liposuction abdomen"). Use the latest user message plus the conversation for context. No operators, no punctuation.
-Use "direct" for greetings, thanks, off-topic or general medical questions, emergencies, emotional distress, requests to recommend a surgeon or clinic, and requests for personal medical advice.`;
+When unsure, choose "search". Use "direct" ONLY for greetings, thanks, off-topic or general medical questions, emergencies, emotional distress, requests to recommend a surgeon or clinic, and requests for personal medical advice.`;
 
 export const APPROVED_LIST = APPROVED_JOURNALS.map((j) => `- ${j.name}`).join("\n");
 
@@ -37,7 +37,7 @@ export function directSystemPrompt(): string {
   return `${BASE_RULES}
 
 ## This turn
-No sources were searched for this message. Do not state medical facts about procedures, risks, recovery, or costs. For greetings, thanks, and off-topic or advice requests, follow the rules above. If the patient actually needs procedure information, invite them to ask a specific question about a procedure.`;
+No sources were searched for this message. Do not state medical facts about procedures, risks, recovery, or costs. For greetings, thanks, and off-topic or advice requests, follow the rules above. Do not list procedures, risks, recovery, benefits, or any other medical facts, even briefly. If the patient needs procedure information, tell them to ask a specific question about a procedure so you can look it up in the journals.`;
 }
 
 export function answerSystemPrompt(articles: Article[]): string {

@@ -9,6 +9,7 @@ type Msg = {
   sources?: Source[];
   followups?: string[];
   error?: boolean;
+  found?: number; // number of journal abstracts found for this answer (only when a search ran)
 };
 
 const MAX_CHARS = 1500;
@@ -110,6 +111,7 @@ export default function Home() {
     // The greeting is local only, so skip it when sending to the API.
     const apiMessages = history
       .slice(1)
+      .filter((m) => !m.error && m.content.trim())
       .map((m) => ({ role: m.role, content: m.content }))
       .slice(-16);
 
@@ -164,6 +166,8 @@ export default function Home() {
             update({ content: splitFollowups(raw).body });
           } else if (ev.t === "status") {
             setStatus(ev.v);
+          } else if (ev.t === "meta") {
+            update({ found: ev.found });
           } else if (ev.t === "cite") {
             sources.push({ n: ev.n, url: ev.url, title: ev.title, meta: ev.meta });
             update({ sources: [...sources] });
@@ -217,6 +221,14 @@ export default function Home() {
 
                 {m.role === "assistant" && isLast && busy && m.content && status && (
                   <div className="status">{status}</div>
+                )}
+
+                {m.role === "assistant" && m.found !== undefined && m.content && (
+                  <div className="status" style={{ marginTop: 8 }}>
+                    {m.found > 0
+                      ? `Searched approved journals: ${m.found} abstract${m.found === 1 ? "" : "s"} found.`
+                      : "Searched approved journals: no matching abstracts found."}
+                  </div>
                 )}
 
                 {m.sources && m.sources.length > 0 && (

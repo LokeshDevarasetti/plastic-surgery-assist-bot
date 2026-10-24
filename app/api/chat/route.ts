@@ -8,7 +8,17 @@ export const maxDuration = 60;
 
 const MAX_MESSAGES = 20;
 const MAX_CHARS_PER_MESSAGE = 1500;
+const MAX_ASSISTANT_CHARS = 6000; // earlier bot answers can be long; they are shortened, not rejected
 const HISTORY_FOR_ANSWER = 8;
+const HISTORY_ASSISTANT_CHARS = 1200;
+
+const NO_SOURCE_TEXT =
+  "I do not have a peer-reviewed source for that, so I would rather not guess. A board-certified plastic surgeon can answer this for you. Is there something else about plastic surgery I can look up?";
+const COST_POINTER =
+  " For cost information, the American Society of Plastic Surgeons (plasticsurgery.org) and FAIR Health (fairhealthconsumer.org) publish price data. A surgeon fee is not the total cost, and prices vary by surgeon and location, so ask for a written quote.";
+const OUTAGE_TEXT = "I could not reach the medical journal database just now. Please try again in a moment.";
+const DEFAULT_FOLLOWUPS =
+  "FOLLOWUPS: What is liposuction? | What are the risks of a tummy tuck? | How long is recovery after a rhinoplasty?";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
@@ -29,8 +39,13 @@ function validate(input: unknown): ChatMessage[] | null {
     const { role, content } = m as { role?: unknown; content?: unknown };
     if ((role !== "user" && role !== "assistant") || typeof content !== "string") return null;
     const trimmed = content.trim();
-    if (!trimmed || trimmed.length > MAX_CHARS_PER_MESSAGE) return null;
-    out.push({ role, content: trimmed });
+    if (!trimmed) return null;
+    if (role === "user") {
+      if (trimmed.length > MAX_CHARS_PER_MESSAGE) return null;
+      out.push({ role, content: trimmed });
+    } else {
+      out.push({ role, content: trimmed.slice(0, MAX_ASSISTANT_CHARS) });
+    }
   }
   if (out[out.length - 1].role !== "user") return null;
   return out;
@@ -84,7 +99,7 @@ export async function POST(req: Request) {
   }
   const messages = validate(body);
   if (!messages) {
-    return json({ error: `Messages must be short (under ${MAX_CHARS_PER_MESSAGE} characters) and end with a user message.` }, 400);
+    return json({ error: `Your question is too long. Please keep it under ${MAX_CHARS_PER_MESSAGE} characters.` }, 400);
   }
 
   const ip = (req.headers.get("x-forwarded-for") || "unknown").split(",")[0].trim();
@@ -108,19 +123,34 @@ export async function POST(req: Request) {
         let articles: Article[] = [];
         if (decision.search) {
           send({ t: "status", v: "Searching peer-reviewed journals..." });
+          let searchFailed = false;
           try {
             articles = await searchApprovedJournals(decision.query);
           } catch (err) {
             console.error("pubmed error", err);
-            // Continue with no sources: the answer prompt then says it has no source.
-            articles = [];
+            searchFailed = true;
+          }
+          send({ t: "meta", searched: true, found: articles.length });
+
+          // No sources means no answer. This is decided in code, so the AI cannot answer from memory.
+          if (articles.length === 0) {
+            const last = messages[messages.length - 1].content;
+            const text = searchFailed
+              ? OUTAGE_TEXT
+              : NO_SOURCE_TEXT + (/cost|price|afford|expens|how much/i.test(last) ? COST_POINTER : "");
+            send({ t: "text", v: `${text}\n${DEFAULT_FOLLOWUPS}` });
+            send({ t: "done" });
+            return;
           }
         }
 
         const system = decision.search ? answerSystemPrompt(articles) : directSystemPrompt();
         const convo: ChatMsg[] = [
           { role: "system", content: system },
-          ...messages.slice(-HISTORY_FOR_ANSWER).map((m) => ({ role: m.role, content: m.content })),
+          ...messages.slice(-HISTORY_FOR_ANSWER).map((m) => ({
+            role: m.role,
+            content: m.role === "assistant" ? m.content.slice(0, HISTORY_ASSISTANT_CHARS) : m.content,
+          })),
         ];
 
         send({ t: "status", v: "Writing answer..." });
