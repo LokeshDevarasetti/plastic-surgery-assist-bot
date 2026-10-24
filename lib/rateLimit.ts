@@ -1,6 +1,6 @@
 // Simple in-memory limits to protect your API budget.
 // On serverless hosts each instance keeps its own counters, so treat these as a
-// best-effort guard. These limits also help you stay inside the free AI tier's daily allowance.
+// best-effort guard. These limits also act as a spending cap, because every question costs a little.
 
 type Bucket = { count: number; resetAt: number };
 
@@ -8,7 +8,7 @@ const perIp = new Map<string, Bucket>();
 let daily: Bucket = { count: 0, resetAt: 0 };
 
 const PER_IP_LIMIT = Number(process.env.PER_IP_PER_HOUR ?? 15);
-const DAILY_LIMIT = Number(process.env.DAILY_REQUEST_LIMIT ?? 300);
+const DAILY_LIMIT = Number(process.env.DAILY_REQUEST_LIMIT ?? 500);
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
 

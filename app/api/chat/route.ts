@@ -1,4 +1,4 @@
-import { complete, streamChat, LlmError, type ChatMsg } from "@/lib/llm";
+import { complete, streamChat, llmConfigured, LlmError, type ChatMsg } from "@/lib/llm";
 import { searchApprovedJournals, type Article } from "@/lib/pubmed";
 import { ROUTER_PROMPT, answerSystemPrompt, directSystemPrompt } from "@/lib/prompts";
 import { checkLimits } from "@/lib/rateLimit";
@@ -58,21 +58,21 @@ async function route(messages: ChatMessage[]): Promise<{ search: boolean; query:
       }
     }
   } catch (err) {
-    if (err instanceof LlmError && (err.status === 429 || err.status === 401)) throw err;
+    if (err instanceof LlmError && [401, 403, 429, 529].includes(err.status)) throw err;
   }
   return { search: true, query: last.slice(0, 120) };
 }
 
 function friendlyLlmError(err: unknown): string {
   if (err instanceof LlmError) {
-    if (err.status === 429) return "The free AI service is busy right now. Please wait a minute and try again.";
+    if (err.status === 429 || err.status === 529) return "The AI service is busy right now. Please wait a minute and try again.";
     if (err.status === 401 || err.status === 403) return "The server's AI key is not working. Please tell the site owner.";
   }
   return "Something went wrong. Please try again in a moment.";
 }
 
 export async function POST(req: Request) {
-  if (!process.env.LLM_API_KEY) {
+  if (!llmConfigured()) {
     return json({ error: "Server is not configured." }, 500);
   }
 
